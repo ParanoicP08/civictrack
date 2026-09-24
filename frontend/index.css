@@ -1,0 +1,138 @@
+import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
+import { useEffect, useState } from "react";
+import { fetchIssues, CATEGORY_COLORS, updateStatus, getAdminKey, setAdminKey } from "../api";
+
+export default function MapView() {
+  const [issues, setIssues] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("");
+  const [adminKeyInput, setAdminKeyInput] = useState(getAdminKey());
+  const [error, setError] = useState(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const data = await fetchIssues(filter ? { category: filter } : {});
+      setIssues(data);
+      setError(null);
+    } catch {
+      setError("Couldn't load reports — is the backend running?");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
+
+  const center = issues.length
+    ? [issues[0].lat, issues[0].lng]
+    : [19.076, 72.878]; // fallback until real data exists
+
+  async function handleStatusChange(id, status) {
+    setError(null);
+    try {
+      await updateStatus(id, status);
+      load();
+    } catch (err) {
+      setError(
+        err.response?.status === 401
+          ? "Admin key is wrong or not set — enter it below to change statuses."
+          : "Status update failed."
+      );
+    }
+  }
+
+  function saveAdminKey() {
+    setAdminKey(adminKeyInput.trim());
+  }
+
+  return (
+    <div>
+      <div className="form-group">
+        <label>Admin key (only needed to verify/resolve/reject reports)</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            type="password"
+            value={adminKeyInput}
+            onChange={(e) => setAdminKeyInput(e.target.value)}
+            placeholder="Enter admin key"
+          />
+          <button type="button" className="secondary" onClick={saveAdminKey}>Save</button>
+        </div>
+      </div>
+
+      {error && <div className="status-banner error">{error}</div>}
+
+      <div className="form-group">
+        <label>Filter by category</label>
+        <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <option value="">All categories</option>
+          {Object.keys(CATEGORY_COLORS).map((cat) => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+      </div>
+
+      {loading ? (
+        <p>Loading…</p>
+      ) : (
+        <div className="map-page">
+          <MapContainer center={center} zoom={14} style={{ height: "100%", width: "100%" }}>
+            <TileLayer
+              attribution='&copy; OpenStreetMap contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {issues.map((issue) => (
+              <CircleMarker
+                key={issue.id}
+                center={[issue.lat, issue.lng]}
+                radius={9}
+                pathOptions={{
+                  color: issue.flagged ? "#000" : CATEGORY_COLORS[issue.category] || "#666",
+                  weight: issue.flagged ? 3 : 1,
+                  fillColor: CATEGORY_COLORS[issue.category] || "#666",
+                  fillOpacity: 0.8,
+                }}
+              >
+                <Popup>
+                  <strong>{issue.category}</strong> — {issue.status}
+                  {issue.confirmations > 1 && (
+                    <span> · confirmed by {issue.confirmations} reports</span>
+                  )}
+                  {issue.flagged ? (
+                    <div style={{ color: "#c0392b", marginTop: 4 }}>
+                      ⚠ Flagged for review: {issue.flag_reason}
+                    </div>
+                  ) : null}
+                  <br />
+                  {issue.description}
+                  {issue.photo_filename && (
+                    <>
+                      <br />
+                      <img src={`/uploads/${issue.photo_filename}`} alt="" style={{ maxWidth: 180, marginTop: 6 }} />
+                    </>
+                  )}
+                  <br />
+                  <select
+                    className="status-select"
+                    value={issue.status}
+                    onChange={(e) => handleStatusChange(issue.id, e.target.value)}
+                    style={{ marginTop: 6 }}
+                  >
+                    <option value="pending">pending</option>
+                    <option value="verified">verified</option>
+                    <option value="resolved">resolved</option>
+                    <option value="rejected">rejected</option>
+                  </select>
+                </Popup>
+              </CircleMarker>
+            ))}
+          </MapContainer>
+        </div>
+      )}
+      {!loading && issues.length === 0 && (
+        <p style={{ color: "#666", marginTop: 12 }}>No issues reported yet — submit one from the "Report" tab.</p>
+      )}
+    </div>
+  );
+}

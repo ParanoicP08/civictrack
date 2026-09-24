@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: civictrack-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ADMIN_KEY
+        generateValue: true
+      - key: FRONTEND_ORIGIN
+        sync: false
+    disk:
+      name: civictrack-data
+      mountPath: /opt/render/project/src/backend
+      sizeGB: 1
