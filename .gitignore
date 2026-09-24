@@ -1,4 +1,14 @@
 
 gods-eye-view/
-
 frontend/.vite/
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+backend/civictrack.db
+backend/civictrack.db-shm
+backend/civictrack.db-wal
+backend/uploads/*
+!backend/uploads/.gitkeep
